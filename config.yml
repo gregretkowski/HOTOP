@@ -1,9 +1,11 @@
 
 # Adjusts position of mouse relative to what camera sees.
-x_multiplier: 2.0
-x_offset: 0
-y_multiplier: 2.0
-y_offset: 0
+# multipliers of 0.5 worked ok in VR, for non-vr testing 2.0 worked well.
+# offset is decimal percent, ie 0.2 = 20% shift right
+x_multiplier: 0.5
+x_offset_percent: 0.0
+y_multiplier: 0.5
+y_offset_percent: 0.0
 
 target_window: DCS
 webcam_index: 1

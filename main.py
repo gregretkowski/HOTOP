@@ -99,12 +99,12 @@ while(True):
         '''
         percent_x = 1.0 * dots[0][0]  / vidframe.shape[1]
         percent_y = 1.0 * dots[0][1] / vidframe.shape[0]
-        percent_x = ((percent_x - 0.5) * config['x_multiplier']) + 0.5
-        percent_y = ((percent_y - 0.5) * config['y_multiplier']) + 0.5
+        percent_x = ((percent_x - 0.5) * config['x_multiplier']) + 0.5 + config['x_offset_percent']
+        percent_y = ((percent_y - 0.5) * config['y_multiplier']) + 0.5 + config['y_offset_percent']
         win_x_span = mywindow[2]-mywindow[0]
         win_y_span = mywindow[3]-mywindow[1]
-        x = int(win_x_span*percent_x)+config['x_offset']+mywindow[0]
-        y = int(win_y_span*percent_y)+config['y_offset']+mywindow[1]
+        x = int(win_x_span*percent_x)+mywindow[0]
+        y = int(win_y_span*percent_y)+mywindow[1]
         is_in_window = (
             x > mywindow[0] and
             x < mywindow[2] and
