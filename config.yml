@@ -12,6 +12,13 @@ camera_inverted: True
 
 debug: False
 
+# dot_method can be circles or contours
+#dot_method: circles
+dot_method: contours
+
+contour_minRadius: 1
+median_frames: 3
+
 # HoughCircles Tunings
 #hc_dp: 1
 #hc_minDist: 5

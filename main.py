@@ -1,6 +1,8 @@
 import logging
+import statistics
 import time
 import yaml
+
 
 import cv2
 import numpy as np
@@ -62,10 +64,13 @@ if config['write_file'] and not config['read_file']:
     out = cv2.VideoWriter('debugging.mp4', cv2.VideoWriter_fourcc(*'XVID'), 24, (frame_width,frame_height))
 
 framecounter = 0
-lastframes=[0,0,0,0,0,0,0]
+lastframes = []
+for x in range(config['median_frames']):
+    lastframes.append(0)
 skips=0
 leftclick_down = False
 rightclick_down = False
+last_xy = (0,0)
 while(True):
 
     # Capture the video frame
@@ -78,10 +83,11 @@ while(True):
             mywindow = GetWindowRect(window_handle)
             logging.info('window found!!')
 
-    def getxy(vidframe,circles,mywindow):
+
+    def getxy(vidframe,dots,mywindow):
         # TODO: add config options here!
-        percent_x = 1.0 * circles[0][0][0]  / vidframe.shape[1]
-        percent_y = 1.0 * circles[0][0][1] / vidframe.shape[0]
+        percent_x = 1.0 * dots[0][0]  / vidframe.shape[1]
+        percent_y = 1.0 * dots[0][1] / vidframe.shape[0]
         win_x_span = mywindow[2]-mywindow[0]
         win_y_span = mywindow[3]-mywindow[1]
         x = int(win_x_span*percent_x)+mywindow[0]
@@ -134,58 +140,70 @@ while(True):
                             )
 
 
-    # Contours.
-
-    contours, _, = cv2.findContours(grayFrame, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-    detections = []
-    for contour in contours:
+    # Contours. - maybe try this again now that we threshold.
+    raw_contours, _, = cv2.findContours(grayFrame, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    contours = []
+    for contour in raw_contours:
         (x,y,w,h) = cv2.boundingRect(contour)
-        if cv2.contourArea(contour) <300:
+        if cv2.contourArea(contour) <config['contour_minRadius']:
             continue
-        detections.append([x,y,w,h])
+        contours.append([x,y,w,h])
 
-    #dot_count = len(xcnts)
-    if circles is None:
-        dot_count = 0
+    dots = []
+    if config['dot_method'] == 'circles':
+        if circles is not None:
+            mycircles = np.round(circles[0, :]).astype("int")
+            for (x, y, r) in mycircles:
+                dots.append((x,y,r))
+    elif config['dot_method'] == 'contours':
+        dots = contours.copy()
     else:
-        dot_count = len(circles[0,:])
-    #dot_count = len(circles)
+        raise Exception(f"unknown dot_method {config['dot_method']}")
+
+    dot_count = len(dots)
     lastframes.pop(0)
     lastframes.append(dot_count)
     if dot_count in [1,2,3]:
         #print(f"Dots X: {x} Y: {y} Count: {dot_count} Circles: {len(circles[0,:])} Skips: {skips}")
         #print(np.shape(circles))
         #print(f"Count - {dot_count}")
-        logging.debug(f"Count - {dot_count} - First Circle Data - X:{1.0*circles[0][0][0]/grayFrame.shape[1]: .2f} Y:{1.0*circles[0][0][1]/grayFrame.shape[0]: .2f} Sz:{circles[0][0][2]}")
+        logging.debug(f"Count - {len(dots)} - First Circle Data - X:{1.0*dots[0][0]/grayFrame.shape[1]: .2f} Y:{1.0*dots[0][1]/grayFrame.shape[0]: .2f} Sz:{dots[0][2]}")
         avgframesfloat = sum(lastframes) / float(len(lastframes))
         avgframes = round(sum(lastframes) / float(len(lastframes)))
+        statistics.median(lastframes)
         logging.debug(f"Lastframes is {avgframesfloat} {avgframes}")
-        logging.debug(f"Detections {len(detections)}")
+        #logging.debug(f"Detections {len(detections)}")
         if avgframes == 1:
             #if framecounter % 10:
-            if leftclick_down:
+            if rightclick_down:
+                rightclick_down = False
+                leftclick_down = False
+                logging.info("RIGHTCLICK")
+                if mywindow is not None and config['send_mouse_events']:
+                    x, y = last_xy
+                    #win32api.SetCursorPos((x,y))
+                    win32api.mouse_event(win32con.MOUSEEVENTF_RIGHTDOWN,x,y,0,0)
+                    win32api.mouse_event(win32con.MOUSEEVENTF_RIGHTUP,x,y,0,0)
+
+                #for x in range(config['median_frames']):
+                #    lastframes.append(0)
+            elif leftclick_down:
                 leftclick_down = False
                 logging.info("LEFTCLICK")
                 if mywindow is not None and config['send_mouse_events']:
-                    x, y = getxy(grayFrame,circles,mywindow)
-                    win32api.SetCursorPos((x,y))
+                    x, y = last_xy
+                    #win32api.SetCursorPos((x,y))
                     win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN,x,y,0,0)
                     win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP,x,y,0,0)
 
-                    win32api.mouse_event(win32con.MOUSEEVENTF_MOVE | win32con.MOUSEEVENTF_ABSOLUTE, int(x/SCREEN_WIDTH*65535.0), int(y/SCREEN_HEIGHT*65535.0))
-            elif rightclick_down:
-                rightclick_down = False
-                logging.info("RIGHTCLICK")
-                if mywindow is not None and config['send_mouse_events']:
-                    x, y = getxy(grayFrame,circles,mywindow)
-                    win32api.SetCursorPos((x,y))
-                    win32api.mouse_event(win32con.MOUSEEVENTF_RIGHTDOWN,x,y,0,0)
-                    win32api.mouse_event(win32con.MOUSEEVENTF_RIGHTUP,x,y,0,0)
-            if framecounter % 100 == 0 or config['debug'] == True:
-                logging.info(f"MOVE X:{1.0*circles[0][0][0]/grayFrame.shape[1]: .2f} Y:{1.0*circles[0][0][1]/grayFrame.shape[0]: .2f}")
+                    #win32api.mouse_event(win32con.MOUSEEVENTF_MOVE | win32con.MOUSEEVENTF_ABSOLUTE, int(x/SCREEN_WIDTH*65535.0), int(y/SCREEN_HEIGHT*65535.0))
+
+            if framecounter % 24 == 0 or config['debug'] == True:
+                logging.info(f"MOVE X:{1.0*dots[0][0]/grayFrame.shape[1]: .2f} Y:{1.0*dots[0][1]/grayFrame.shape[0]: .2f}")
             if mywindow is not None and config['send_mouse_events']:
-                x, y = getxy(grayFrame,circles,mywindow)
+                x, y = getxy(grayFrame,dots,mywindow)
                 win32api.SetCursorPos((x,y))
+                last_xy = x,y
         elif avgframes == 2 or avgframes == 3:
             if avgframes == 2:
                 leftclick_down = True
@@ -215,15 +233,18 @@ while(True):
             cv2.circle(output, (x, y), r, (0, 255, 0), 4)
             cv2.rectangle(output, (x - 5, y - 5), (x + 5, y + 5), (0, 128, 255), -1)
 
+    for contour in contours:
+        x, y, w, h = contour
+        #image, start_point, end_point, color, thickness
+        cv2.rectangle(output, (x - 5, y - 5), (x+w + 5, y+h + 5), (255, 0, 0), 2)
 
-    cv2.imshow('frame', output)
+    if config['show_vid_window']:
+        cv2.imshow('frame', output)
     # OK we can findwindow!!
 
 
-
-
-
-
+    # TODO - also quit if someone does so at the windows terminal window.
+    # https://stackoverflow.com/questions/2408560/non-blocking-console-input
 
     # note hit 'q' over the video window!!!
     if cv2.waitKey(1) & 0xFF == ord('q'):
