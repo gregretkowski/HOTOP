@@ -23,7 +23,8 @@ prints. No support is offered.
 * package as an executable
 * build a UI via Kivy
 * auto-calibration by clicking left-center, top-center, right-center
-* smoothing algorythms & reliability tuning
+* smoothing algorithms & reliability tuning
+* someone go make some HW / CAD / 3D printable designs
 
 # Hardware and Protocol
 
@@ -60,6 +61,10 @@ There are some things I'll do in the next glove to improve performance
 * Ensure LED's are angled away from the hand (30deg?)
 * that the LED's used have a wide beam.
 * Make the three LED's further from each other.
+
+The HW specification is 'free and open' and anyone is welcome to
+make and sell kits or completed hardware. The author may be one
+of your first customers.
 
 # Developing
 
