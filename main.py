@@ -1,14 +1,17 @@
+import logging
 import time
+import yaml
 
 import cv2
 import numpy as np
-import yaml
+
 #import pywin32
 #print(cv2.__version__)
 
 from win32gui import FindWindow, GetWindowRect
 
 import win32api, win32con
+
 config = {}
 with open("config.yml", 'r') as stream:
     try:
@@ -16,6 +19,11 @@ with open("config.yml", 'r') as stream:
         #print(parsed_yaml)
     except yaml.YAMLError as exc:
         print(exc)
+
+if config['debug']:
+    logging.basicConfig(level=logging.DEBUG)
+else:
+    logging.basicConfig(level=logging.INFO)
 
 WRITE=False
 READ=False
@@ -38,6 +46,11 @@ print(arr)
 '''
 if config['read_file']:
     vid = cv2.VideoCapture('debugging.mp4')
+
+    #width = 1920
+    #height = 1080
+    #vid.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+    #vid.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
 else:
     vid = cv2.VideoCapture(1)
     frame_width = int(vid.get(3))
@@ -48,11 +61,33 @@ mywindow = None
 if config['write_file'] and not config['read_file']:
     out = cv2.VideoWriter('debugging.mp4', cv2.VideoWriter_fourcc(*'XVID'), 24, (frame_width,frame_height))
 
+framecounter = 0
+lastframes=[0,0,0,0,0,0,0]
 skips=0
+leftclick_down = False
+rightclick_down = False
 while(True):
 
     # Capture the video frame
     # by frame
+
+    if mywindow is None:
+
+        window_handle = FindWindow(None, config['target_window'])
+        if window_handle:
+            mywindow = GetWindowRect(window_handle)
+            logging.info('window found!!')
+
+    def getxy(vidframe,circles,mywindow):
+        # TODO: add config options here!
+        percent_x = 1.0 * circles[0][0][0]  / vidframe.shape[1]
+        percent_y = 1.0 * circles[0][0][1] / vidframe.shape[0]
+        win_x_span = mywindow[2]-mywindow[0]
+        win_y_span = mywindow[3]-mywindow[1]
+        x = int(win_x_span*percent_x)+mywindow[0]
+        y = int(win_y_span*percent_y)+mywindow[1]
+        return x, y
+
 
     ret, frame = vid.read()
 
@@ -63,7 +98,12 @@ while(True):
     if config['camera_inverted']:
         frame = cv2.rotate(frame, cv2.ROTATE_180)
 
+
     grayFrame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    if config['binary_threshold']:
+        _, grayFrame = cv2.threshold(grayFrame,127,255,cv2.THRESH_BINARY)
+    #grayFrame = cv2.adaptiveThreshold(grayFrame,255,cv2.ADAPTIVE_THRESH_MEAN_C,\
+    #        cv2.THRESH_BINARY,11,2)
 
     '''
 
@@ -94,26 +134,77 @@ while(True):
                             )
 
 
+    # Contours.
+
+    contours, _, = cv2.findContours(grayFrame, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    detections = []
+    for contour in contours:
+        (x,y,w,h) = cv2.boundingRect(contour)
+        if cv2.contourArea(contour) <300:
+            continue
+        detections.append([x,y,w,h])
+
     #dot_count = len(xcnts)
     if circles is None:
         dot_count = 0
     else:
         dot_count = len(circles[0,:])
     #dot_count = len(circles)
+    lastframes.pop(0)
+    lastframes.append(dot_count)
     if dot_count in [1,2,3]:
         #print(f"Dots X: {x} Y: {y} Count: {dot_count} Circles: {len(circles[0,:])} Skips: {skips}")
         #print(np.shape(circles))
         #print(f"Count - {dot_count}")
-        print(f"Count - {dot_count} - First Circle Data - X:{1.0*circles[0][0][0]/grayFrame.shape[1]: .2f} Y:{1.0*circles[0][0][1]/grayFrame.shape[0]: .2f} Sz:{circles[0][0][2]}")
+        logging.debug(f"Count - {dot_count} - First Circle Data - X:{1.0*circles[0][0][0]/grayFrame.shape[1]: .2f} Y:{1.0*circles[0][0][1]/grayFrame.shape[0]: .2f} Sz:{circles[0][0][2]}")
+        avgframesfloat = sum(lastframes) / float(len(lastframes))
+        avgframes = round(sum(lastframes) / float(len(lastframes)))
+        logging.debug(f"Lastframes is {avgframesfloat} {avgframes}")
+        logging.debug(f"Detections {len(detections)}")
+        if avgframes == 1:
+            #if framecounter % 10:
+            if leftclick_down:
+                leftclick_down = False
+                logging.info("LEFTCLICK")
+                if mywindow is not None and config['send_mouse_events']:
+                    x, y = getxy(grayFrame,circles,mywindow)
+                    win32api.SetCursorPos((x,y))
+                    win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN,x,y,0,0)
+                    win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP,x,y,0,0)
+
+                    win32api.mouse_event(win32con.MOUSEEVENTF_MOVE | win32con.MOUSEEVENTF_ABSOLUTE, int(x/SCREEN_WIDTH*65535.0), int(y/SCREEN_HEIGHT*65535.0))
+            elif rightclick_down:
+                rightclick_down = False
+                logging.info("RIGHTCLICK")
+                if mywindow is not None and config['send_mouse_events']:
+                    x, y = getxy(grayFrame,circles,mywindow)
+                    win32api.SetCursorPos((x,y))
+                    win32api.mouse_event(win32con.MOUSEEVENTF_RIGHTDOWN,x,y,0,0)
+                    win32api.mouse_event(win32con.MOUSEEVENTF_RIGHTUP,x,y,0,0)
+            if framecounter % 100 == 0 or config['debug'] == True:
+                logging.info(f"MOVE X:{1.0*circles[0][0][0]/grayFrame.shape[1]: .2f} Y:{1.0*circles[0][0][1]/grayFrame.shape[0]: .2f}")
+            if mywindow is not None and config['send_mouse_events']:
+                x, y = getxy(grayFrame,circles,mywindow)
+                win32api.SetCursorPos((x,y))
+        elif avgframes == 2 or avgframes == 3:
+            if avgframes == 2:
+                leftclick_down = True
+                #logging.info("LEFTCLICK")
+            elif avgframes == 3:
+                rightclick_down = True
+                leftclick_down = False
+                #logging.info("RIGHTCLICK")
+
         skips=0
     else:
         skips += 1
 
-
+    framecounter+=1
     # the 'q' button is set as the
     # quitting button you may use any
     # desired button of your choice
-    output = frame.copy()
+    #output = grayFrame.copy()
+    output = cv2.cvtColor(grayFrame,cv2.COLOR_GRAY2RGB)
     if circles is not None:
         # convert the (x, y) coordinates and radius of the circles to integers
         mycircles = np.round(circles[0, :]).astype("int")
@@ -127,35 +218,9 @@ while(True):
 
     cv2.imshow('frame', output)
     # OK we can findwindow!!
-    if mywindow is None:
 
-        window_handle = FindWindow(None, config['target_window'])
-        if window_handle:
-            mywindow = GetWindowRect(window_handle)
-            print('window set!!')
 
-    def getxy(vidframe,circles,mywindow):
-        # TODO: add config options here!
-        percent_x = 1.0 * circles[0][0][0]  / vidframe.shape[1]
-        percent_y = 1.0 * circles[0][0][1] / vidframe.shape[0]
-        win_x_span = mywindow[2]-mywindow[0]
-        win_y_span = mywindow[3]-mywindow[1]
-        x = int(win_x_span*percent_x)+mywindow[0]
-        y = int(win_y_span*percent_y)+mywindow[1]
-        return x, y
 
-    # mouse stuff
-    if mywindow is not None and dot_count == 1:
-            x, y = getxy(grayFrame,circles,mywindow)
-            #x = mywindow[0]+mywindow[2]
-            #y = mywindow[1]+mywindow[3]
-            print(f"Curs to {x} / {y}")
-            print(mywindow)
-            #(0, 0, 800, 600)
-            if config['send_mouse_events']:
-                win32api.SetCursorPos((x,y))
-                #win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN,x,y,0,0)
-                #win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP,x,y,0,0)
 
 
 
