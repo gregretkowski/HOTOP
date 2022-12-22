@@ -64,13 +64,13 @@ if config['write_file'] and not config['read_file']:
     out = cv2.VideoWriter('debugging.mp4', cv2.VideoWriter_fourcc(*'XVID'), 24, (frame_width,frame_height))
 
 framecounter = 0
-lastframes = []
-for x in range(config['median_frames']):
-    lastframes.append(0)
+lastframes = [0 for x in range(config['median_frames'])]
+
 skips=0
 leftclick_down = False
 rightclick_down = False
 last_xy = (0,0)
+click_counter = 0
 while(True):
 
     # Capture the video frame
@@ -85,7 +85,18 @@ while(True):
 
 
     def getxy(vidframe,dots,mywindow):
+        ''' Returns the absolute X and Y values on the screen that
+            the mouse should be positioned at. Based on hand location,
+            location and size of game window, and adjustments from
+            the config file.
+        '''
         # TODO: add config options here!
+        '''
+        x_multiplier: 1.0
+        x_offset: 0
+        y_multiplier: 1.0
+        y_offset: 0
+        '''
         percent_x = 1.0 * dots[0][0]  / vidframe.shape[1]
         percent_y = 1.0 * dots[0][1] / vidframe.shape[0]
         win_x_span = mywindow[2]-mywindow[0]
@@ -163,6 +174,7 @@ while(True):
     dot_count = len(dots)
     lastframes.pop(0)
     lastframes.append(dot_count)
+
     if dot_count in [1,2,3]:
         #print(f"Dots X: {x} Y: {y} Count: {dot_count} Circles: {len(circles[0,:])} Skips: {skips}")
         #print(np.shape(circles))
@@ -175,7 +187,13 @@ while(True):
         #logging.debug(f"Detections {len(detections)}")
         if avgframes == 1:
             #if framecounter % 10:
-            if rightclick_down:
+            if click_counter > config['mousewheel_activate_frames']:
+                # We were in a mousewheel event that finished, so zero
+                # these out.
+                click_counter = 0
+                rightclick_down = False
+                leftclick_down = False
+            elif rightclick_down:
                 rightclick_down = False
                 leftclick_down = False
                 logging.info("RIGHTCLICK")
@@ -183,6 +201,7 @@ while(True):
                     x, y = last_xy
                     #win32api.SetCursorPos((x,y))
                     win32api.mouse_event(win32con.MOUSEEVENTF_RIGHTDOWN,x,y,0,0)
+                    time.sleep(1/24.0)
                     win32api.mouse_event(win32con.MOUSEEVENTF_RIGHTUP,x,y,0,0)
 
                 #for x in range(config['median_frames']):
@@ -194,24 +213,37 @@ while(True):
                     x, y = last_xy
                     #win32api.SetCursorPos((x,y))
                     win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN,x,y,0,0)
+                    time.sleep(1/24.0)
                     win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP,x,y,0,0)
 
-                    #win32api.mouse_event(win32con.MOUSEEVENTF_MOVE | win32con.MOUSEEVENTF_ABSOLUTE, int(x/SCREEN_WIDTH*65535.0), int(y/SCREEN_HEIGHT*65535.0))
+            # If theres button presses in here the location is thrown off.
+            if lastframes == [1 for x in range(config['median_frames'])]:
+                if framecounter % 24 == 0 or config['debug'] == True:
+                    logging.info(f"MOVE X:{1.0*dots[0][0]/grayFrame.shape[1]: .2f} Y:{1.0*dots[0][1]/grayFrame.shape[0]: .2f}")
+                if mywindow is not None and config['send_mouse_events']:
+                    x, y = getxy(grayFrame,dots,mywindow)
+                    win32api.SetCursorPos((x,y))
+                    last_xy = x,y
 
-            if framecounter % 24 == 0 or config['debug'] == True:
-                logging.info(f"MOVE X:{1.0*dots[0][0]/grayFrame.shape[1]: .2f} Y:{1.0*dots[0][1]/grayFrame.shape[0]: .2f}")
-            if mywindow is not None and config['send_mouse_events']:
-                x, y = getxy(grayFrame,dots,mywindow)
-                win32api.SetCursorPos((x,y))
-                last_xy = x,y
         elif avgframes == 2 or avgframes == 3:
+            click_counter += 1
             if avgframes == 2:
                 leftclick_down = True
-                #logging.info("LEFTCLICK")
+                if click_counter > config['mousewheel_activate_frames']:
+                    if click_counter % config['mousewheel_turn_frames'] == 0:
+                        x, y = last_xy
+                        logging.info("SCROLLDOWN")
+                        if mywindow is not None and config['send_mouse_events']:
+                            win32api.mouse_event(win32con.MOUSEEVENTF_WHEEL, x, y, -1, 0)
             elif avgframes == 3:
                 rightclick_down = True
                 leftclick_down = False
-                #logging.info("RIGHTCLICK")
+                if click_counter > config['mousewheel_activate_frames']:
+                    if click_counter % config['mousewheel_turn_frames'] == 0:
+                        x, y = last_xy
+                        logging.info("SCROLLUP")
+                        if mywindow is not None and config['send_mouse_events']:
+                            win32api.mouse_event(win32con.MOUSEEVENTF_WHEEL, x, y, 1, 0)
 
         skips=0
     else:
@@ -249,7 +281,7 @@ while(True):
     # note hit 'q' over the video window!!!
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
-    if config['read_file'] and circles is not None:
+    if config['read_file'] and dots is not None:
         time.sleep(0.1)
 
 
