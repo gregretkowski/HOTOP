@@ -1,8 +1,8 @@
 
 # Adjusts position of mouse relative to what camera sees.
-x_multiplier: 1.0
+x_multiplier: 2.0
 x_offset: 0
-y_multiplier: 1.0
+y_multiplier: 2.0
 y_offset: 0
 
 target_window: DCS
@@ -19,7 +19,7 @@ debug: False
 # look at previous three frames to determine action
 median_frames: 3
 mousewheel_activate_frames: 36
-mousewheel_turn_frames: 12
+mousewheel_turn_frames: 6
 
 # Makes image all-white/all-black to simplify detection
 binary_threshold: True

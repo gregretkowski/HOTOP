@@ -99,11 +99,19 @@ while(True):
         '''
         percent_x = 1.0 * dots[0][0]  / vidframe.shape[1]
         percent_y = 1.0 * dots[0][1] / vidframe.shape[0]
+        percent_x = ((percent_x - 0.5) * config['x_multiplier']) + 0.5
+        percent_y = ((percent_y - 0.5) * config['y_multiplier']) + 0.5
         win_x_span = mywindow[2]-mywindow[0]
         win_y_span = mywindow[3]-mywindow[1]
-        x = int(win_x_span*percent_x)+mywindow[0]
-        y = int(win_y_span*percent_y)+mywindow[1]
-        return x, y
+        x = int(win_x_span*percent_x)+config['x_offset']+mywindow[0]
+        y = int(win_y_span*percent_y)+config['y_offset']+mywindow[1]
+        is_in_window = (
+            x > mywindow[0] and
+            x < mywindow[2] and
+            y > mywindow[1] and
+            y < mywindow[2]
+        )
+        return x, y, is_in_window
 
 
     ret, frame = vid.read()
@@ -221,9 +229,10 @@ while(True):
                 if framecounter % 24 == 0 or config['debug'] == True:
                     logging.info(f"MOVE X:{1.0*dots[0][0]/grayFrame.shape[1]: .2f} Y:{1.0*dots[0][1]/grayFrame.shape[0]: .2f}")
                 if mywindow is not None and config['send_mouse_events']:
-                    x, y = getxy(grayFrame,dots,mywindow)
-                    win32api.SetCursorPos((x,y))
-                    last_xy = x,y
+                    x, y, is_in_window = getxy(grayFrame,dots,mywindow)
+                    if is_in_window:
+                        win32api.SetCursorPos((x,y))
+                        last_xy = x,y
 
         elif avgframes == 2 or avgframes == 3:
             click_counter += 1
