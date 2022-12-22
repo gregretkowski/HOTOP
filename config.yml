@@ -1,0 +1,18 @@
+x_multiplier: 1.0
+x_offset: 0
+y_multiplier: 1.0
+y_offset: 0
+show_vid_window: True
+send_mouse_events: False
+target_window: DCS
+webcam_index: 1
+read_file: False
+write_file: False
+camera_inverted: True
+# HoughCircles Tunings
+hc_dp: 1
+hc_minDist: 20
+hc_param1: 50
+hc_param2: 30
+hc_minRadius: 2
+hc_maxRadius_divisor: 20.0
